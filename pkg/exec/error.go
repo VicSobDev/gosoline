@@ -3,9 +3,9 @@ package exec
 import (
 	"errors"
 	"io"
+	"net"
 	"strings"
-
-	"golang.org/x/sys/unix"
+	"syscall"
 )
 
 type ErrorType int
@@ -47,10 +47,26 @@ func CheckConnectionError(_ interface{}, err error) ErrorType {
 }
 
 func IsConnectionError(err error) bool {
-	if errors.Is(err, io.EOF) || errors.Is(err, unix.ECONNREFUSED) || errors.Is(err, unix.ECONNRESET) || errors.Is(err, unix.EPIPE) {
+	if errors.Is(err, io.EOF) {
+		// End of file (EOF) is a common indication of a connection being closed.
 		return true
 	}
 
+	// Check for errors that implement the net.Error interface for network-related issues.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		// Timeout or temporary errors are often indicative of connection issues.
+		if netErr.Timeout() {
+			return true
+		}
+	}
+
+	// Check for *net.OpError, which can provide more specific details about network operations failures.
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		// This includes various syscall errors like "connection refused", "connection reset", etc.
+		return true
+	}
 	if strings.Contains(err.Error(), "read: connection reset") {
 		return true
 	}
@@ -67,7 +83,18 @@ func CheckTimeoutError(_ interface{}, err error) ErrorType {
 }
 
 func IsTimeoutError(err error) bool {
-	return errors.Is(err, unix.ETIMEDOUT)
+	if errors.Is(err, syscall.ETIMEDOUT) {
+		// Directly checks for a timeout error.
+		return true
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		// net.Error provides a Timeout method to check if the error is a timeout.
+		return netErr.Timeout()
+	}
+
+	return false
 }
 
 func CheckClientAwaitHeaderTimeoutError(_ interface{}, err error) ErrorType {

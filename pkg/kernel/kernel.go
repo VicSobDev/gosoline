@@ -17,7 +17,6 @@ import (
 	"github.com/justtrackio/gosoline/pkg/coffin"
 	"github.com/justtrackio/gosoline/pkg/conc"
 	"github.com/justtrackio/gosoline/pkg/log"
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -101,7 +100,7 @@ func (k *kernel) Run() {
 	k.debugConfig()
 
 	sig := make(chan os.Signal, 2)
-	signal.Notify(sig, unix.SIGTERM, unix.SIGINT)
+	signal.Notify(sig, os.Interrupt)
 
 	go func() {
 		signal := <-sig
